@@ -4,39 +4,45 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// ====== CẤU HÌNH ======
+// =========================
+// CẤU HÌNH
+// =========================
 const VERIFY_TOKEN = "fbs_verify_2026";
 
-// NÊN thay bằng token mới vì token cũ đã lộ
-const CAPI_ACCESS_TOKEN = "DAN_TOKEN_MOI_VAO_DAY";
-
-// Mỗi page -> 1 dataset
+// Mỗi page -> dataset -> access token riêng
 const PAGE_CONFIG = {
   "916541818208252": {
     name: "Cao Kim Thắm",
     datasetId: "437137782172073",
+    accessToken: "EAAUiA2mi5PoBQxBKxxWXuQfn3pbsDD38ZCqESudYoh2XIeEaG0aeND78b3HRYabeZAS3nENDgEwWNipeFXcSYdURe0UYLh32u4FNNyQoyYfjZCGwk97dvGGIpqJrNLzi7B8AIPazqXTzYaIEhYxTV557MkGxZCtcFiPwqNvdedHZA743eWAHXFgF2v8LatQZDZD",
   },
   "100473475119497": {
     name: "Tâm Lý NHC",
     datasetId: "878492095227131",
+    accessToken: "EAAUiA2mi5PoBQ2IESwPi6Jmj8FLpokHoXinE4VKG0J1M1ZCgAZBIfxfyTOomI3Rkpuv62pU26eq1JfW4sQOYxKhZBXfsFRC56IB39VGjFxLOrpJkiZBbFY3wetfSi9FvcyCWpObetUvm0pfdQ7TYna6X66AcVvaVw32BjOb1ruDGJ5U1YXzGX2YtAVPMkgZDZD",
   },
   "115119253675803": {
     name: "Bùi Thị Hải Yến",
     datasetId: "1168329245219850",
+    accessToken: "EAAUiA2mi5PoBQxs7bwfZBI4U0UqBbHbUQGJDWpR7HB0qViCW4yPw0RyBteVQTm9k4NHoEoE7DR0VrMyFnnrZA6uvhbOzfnsUbzM1jxBdSnKrOcbmv76BnK5BwdMGTuF2ZCVTLygBun09Kf4pjE7juurQwHyfyo5kgWKErg7bDUCpUMrorHpU56QgIAcNQZDZD",
   },
 };
 
-// Điều kiện: phải có ít nhất 2 tin nhắn text trước khi tin nhắn chứa SĐT được tính lead
+// Phải có ít nhất 2 tin nhắn text trước khi tin nhắn chứa SĐT được tính lead
 const MIN_MESSAGES_BEFORE_PHONE = 2;
 
-// ====== BỘ NHỚ TẠM ======
+// =========================
+// BỘ NHỚ TẠM
+// =========================
 // key: `${pageId}_${psid}`
 const conversationState = new Map();
 
 // key: `${pageId}_${psid}_${phone}`
 const sentLeadKeys = new Set();
 
-// ====== HÀM HỖ TRỢ ======
+// =========================
+// HÀM HỖ TRỢ
+// =========================
 function getConversationKey(pageId, psid) {
   return `${pageId}_${psid}`;
 }
@@ -66,7 +72,6 @@ function normalizeVNPhone(input) {
 function extractVNPhone(text) {
   if (!text) return null;
 
-  // Bắt SĐT VN, cho phép khoảng trắng / dấu chấm / gạch ngang
   const matches = text.match(/(\+84|84|0)([\s.\-]?\d){8,10}/g);
   if (!matches) return null;
 
@@ -82,7 +87,14 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-async function sendLeadSubmittedEvent({ datasetId, pageId, psid, phone, pageName }) {
+async function sendLeadSubmittedEvent({
+  datasetId,
+  accessToken,
+  pageId,
+  psid,
+  phone,
+  pageName,
+}) {
   const eventId = `leadsubmitted_${pageId}_${psid}_${Date.now()}`;
 
   const payload = {
@@ -108,7 +120,7 @@ async function sendLeadSubmittedEvent({ datasetId, pageId, psid, phone, pageName
   };
 
   const url = `https://graph.facebook.com/v25.0/${datasetId}/events?access_token=${encodeURIComponent(
-    CAPI_ACCESS_TOKEN
+    accessToken
   )}`;
 
   const response = await fetch(url, {
@@ -128,7 +140,9 @@ async function sendLeadSubmittedEvent({ datasetId, pageId, psid, phone, pageName
   console.log(`[CAPI SUCCESS] dataset=${datasetId} response=${resultText}`);
 }
 
-// ====== XÁC MINH WEBHOOK ======
+// =========================
+// XÁC MINH WEBHOOK
+// =========================
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -145,11 +159,13 @@ app.get("/webhook", (req, res) => {
   return res.sendStatus(400);
 });
 
-// ====== NHẬN SỰ KIỆN MESSENGER ======
+// =========================
+// NHẬN SỰ KIỆN MESSENGER
+// =========================
 app.post("/webhook", async (req, res) => {
   const body = req.body;
 
-  // Trả 200 sớm để Meta không timeout webhook
+  // Trả 200 sớm để Meta không timeout
   res.status(200).send("EVENT_RECEIVED");
 
   if (body.object !== "page") {
@@ -162,12 +178,11 @@ app.post("/webhook", async (req, res) => {
       const pageConfig = PAGE_CONFIG[pageId];
 
       if (!pageConfig) {
-        console.log(`[SKIP] Page ${pageId} chưa được map dataset.`);
+        console.log(`[SKIP] Page ${pageId} chưa được cấu hình.`);
         continue;
       }
 
       for (const event of entry.messaging || []) {
-        // Chỉ xử lý tin nhắn text từ user
         if (!event.sender?.id) continue;
         if (!event.message?.text) continue;
         if (event.message?.is_echo) continue;
@@ -183,7 +198,7 @@ app.post("/webhook", async (req, res) => {
 
         const phone = extractVNPhone(text);
 
-        // Chưa có số điện thoại -> chỉ đếm tin nhắn hội thoại
+        // Chưa có SĐT -> chỉ đếm tin nhắn text
         if (!phone) {
           oldState.messageCount += 1;
           conversationState.set(convoKey, oldState);
@@ -194,12 +209,10 @@ app.post("/webhook", async (req, res) => {
           continue;
         }
 
-        // Có số điện thoại
         console.log(
           `[PHONE DETECTED] page=${pageConfig.name} (${pageId}) psid=${psid} phone=${phone} previousTextMessages=${oldState.messageCount}`
         );
 
-        // Điều kiện: trước đó phải có >= 2 tin nhắn text
         if (oldState.messageCount < MIN_MESSAGES_BEFORE_PHONE) {
           console.log(
             `[SKIP] Chưa đủ điều kiện lead. Mới có ${oldState.messageCount} tin nhắn trước đó, cần tối thiểu ${MIN_MESSAGES_BEFORE_PHONE}.`
@@ -216,6 +229,7 @@ app.post("/webhook", async (req, res) => {
 
         await sendLeadSubmittedEvent({
           datasetId: pageConfig.datasetId,
+          accessToken: pageConfig.accessToken,
           pageId,
           psid,
           phone,
@@ -227,7 +241,7 @@ app.post("/webhook", async (req, res) => {
         sentLeadKeys.add(dedupKey);
 
         console.log(
-          `[LEAD SUBMITTED] Đã gửi LeadSubmitted cho page=${pageConfig.name}, dataset=${pageConfig.datasetId}`
+          `[LEAD SUBMITTED] page=${pageConfig.name}, dataset=${pageConfig.datasetId}`
         );
       }
     }
