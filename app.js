@@ -103,6 +103,7 @@ async function sendLeadSubmittedEvent({
         event_name: "LeadSubmitted",
         event_time: Math.floor(Date.now() / 1000),
         action_source: "business_messaging",
+        messaging_channel: "messenger",
         event_id: eventId,
         user_data: {
           page_id: pageId,
@@ -254,3 +255,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
